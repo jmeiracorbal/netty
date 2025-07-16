@@ -765,14 +765,20 @@ traceroute_host() {
                     local timing=$(echo "$line" | grep -o '[0-9]*\.[0-9]*.*ms' | head -1)
                     if [ -n "$timing" ]; then
                         local ms_value=$(echo "$timing" | grep -o '[0-9]*\.[0-9]*' | head -1)
-                        if [ -n "$ms_value" ]; then
+                        if [ -n "$ms_value" ] && [[ "$ms_value" =~ ^[0-9]+\.?[0-9]*$ ]]; then
                             local ms_int=$(echo "$ms_value" | cut -d'.' -f1)
-                            if [ "$ms_int" -lt 50 ]; then
-                                echo -e "${GREEN}${hop_num}${NC} ${rest}"
-                            elif [ "$ms_int" -lt 150 ]; then
-                                echo -e "${YELLOW}${hop_num}${NC} ${rest}"
+                            # Validate that ms_int is not empty and is numeric
+                            if [ -n "$ms_int" ] && [[ "$ms_int" =~ ^[0-9]+$ ]]; then
+                                if [ "$ms_int" -lt 50 ]; then
+                                    echo -e "${GREEN}${hop_num}${NC} ${rest}"
+                                elif [ "$ms_int" -lt 150 ]; then
+                                    echo -e "${YELLOW}${hop_num}${NC} ${rest}"
+                                else
+                                    echo -e "${RED}${hop_num}${NC} ${rest}"
+                                fi
                             else
-                                echo -e "${RED}${hop_num}${NC} ${rest}"
+                                # Fallback if ms_int is not valid
+                                echo -e "${BLUE}${hop_num}${NC} ${rest}"
                             fi
                         else
                             echo -e "${BLUE}${hop_num}${NC} ${rest}"
@@ -793,11 +799,25 @@ traceroute_host() {
         
         # Extract and display summary statistics
         local hop_count=$(echo "$traceroute_output" | grep -c "^[[:space:]]*[0-9]")
+        hop_count=${hop_count:-0}
         local timeout_count=$(echo "$traceroute_output" | grep -c "\*")
+        timeout_count=${timeout_count:-0}
+        # Forzar que sean números puros
+        if [[ ! "$hop_count" =~ ^[0-9]+$ ]]; then
+          hop_count=0
+        fi
+        if [[ ! "$timeout_count" =~ ^[0-9]+$ ]]; then
+          timeout_count=0
+        fi
         
-        echo -e "${CYAN}=== Route Summary ===${NC}"
-        echo -e "${BLUE}Total hops: ${GREEN}$hop_count${NC}"
-        echo -e "${BLUE}Timeouts: ${YELLOW}$timeout_count${NC}"
+        # Asegurar comparaciones robustas
+        if [ "${hop_count:-0}" -gt 0 ]; then
+            echo -e "${CYAN}=== Route Summary ===${NC}"
+            echo -e "${BLUE}Total hops: ${GREEN}$hop_count${NC}"
+            echo -e "${BLUE}Timeouts: ${YELLOW}$timeout_count${NC}"
+        else
+            echo -e "${YELLOW}No hops found in traceroute output${NC}"
+        fi
         
         log_message "SUCCESS" "Traceroute to $host completed - $hop_count hops, $timeout_count timeouts"
         
