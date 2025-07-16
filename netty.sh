@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Netty - Comprehensive network utilities for macOS
+# Netty - Network utilities for macOS
 # Author: José Meira
-# Version: 1.0.0
+# Version: 1.1.0
 
 # Colors and formatting
 RED='\033[0;31m'
@@ -17,7 +17,7 @@ DIM='\033[2m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="1.0.0"
+VERSION="1.1.0"
 CONFIG_DIR="$HOME/.netty"
 LOG_FILE="$CONFIG_DIR/netty.log"
 RESULTS_DIR="$CONFIG_DIR/results"
@@ -84,7 +84,7 @@ COMMANDS:
     dns                     DNS tools and management
     monitor                 Network traffic monitor
     ip                      IP address and geolocation info
-    ping HOST               Enhanced ping with statistics
+    <ping HOST               Enhanced ping with statistics
     trace HOST              Traceroute with timing analysis
     ports [HOST]            Port scanner and security check
     bandwidth               Bandwidth usage by application
@@ -152,6 +152,7 @@ get_interface_info() {
 }
 
 # WiFi scanner
+# WiFi scanner simplificado sin columnas problemáticas
 wifi_scan() {
     log_message "INFO" "Starting WiFi scan"
     echo -e "${CYAN}=== WiFi Network Scanner ===${NC}"
@@ -174,59 +175,31 @@ wifi_scan() {
         current_ssid=$(echo "$current_network" | cut -d':' -f2 | sed 's/^ *//')
     fi
     
-    # Get WiFi interface details
-    local wifi_info=$(system_profiler SPAirPortDataType 2>/dev/null)
-    
-    echo -e "${BOLD}┌────────────────────────────────┬─────────┬─────────┬──────────┬──────────┐${NC}"
-    echo -e "${BOLD}│ Network Name (SSID)            │ Channel │ Signal  │ Security │ Status   │${NC}"
-    echo -e "${BOLD}├────────────────────────────────┼─────────┼─────────┼──────────┼──────────┤${NC}"
+    # Tabla simplificada - solo SSID y Status
+    echo -e "${BOLD}┌──────────────────────────────────────────────┬──────────────┐${NC}"
+    echo -e "${BOLD}│ Network Name (SSID)                          │ Status       │${NC}"
+    echo -e "${BOLD}├──────────────────────────────────────────────┼──────────────┤${NC}"
     
     local networks_shown=0
     
-    # Show current connected network with details
+    # Show current connected network
     if [ -n "$current_ssid" ] && [[ "$current_ssid" != *"not associated"* ]]; then
-        # Extract network details from system profiler
-        local channel=$(echo "$wifi_info" | grep -A 20 "$current_ssid" | grep -E "(Channel|channel)" | head -1 | awk '{print $2}' | tr -d '(),')
-        local security=$(echo "$wifi_info" | grep -A 20 "$current_ssid" | grep -E "(Security|security)" | head -1 | awk '{print $2}')
-        local rssi=$(echo "$wifi_info" | grep -A 20 "$current_ssid" | grep -E "(RSSI|Signal)" | head -1 | awk '{print $2}' | tr -d 'dBm(),')
-        
-        # Determine signal strength
-        local signal_bar="${GREEN}███░${NC}"
-        if [ -n "$rssi" ] && [[ "$rssi" =~ ^-?[0-9]+$ ]]; then
-            if [ "$rssi" -gt -40 ]; then
-                signal_bar="${GREEN}████${NC}"
-            elif [ "$rssi" -gt -60 ]; then
-                signal_bar="${GREEN}███░${NC}"
-            elif [ "$rssi" -gt -75 ]; then
-                signal_bar="${YELLOW}██░░${NC}"
-            else
-                signal_bar="${RED}█░░░${NC}"
-            fi
-        fi
-        
-        # Determine band from channel
-        local band="2.4GHz"
-        if [ -n "$channel" ] && [ "$channel" -gt 14 ] 2>/dev/null; then
-            band="5GHz"
-        fi
-        
-        printf "${BOLD}│${NC} %-30s ${BOLD}│${NC} %-7s ${BOLD}│${NC} %s ${BOLD}│${NC} %-8s ${BOLD}│${NC} ${GREEN}%-8s${NC} ${BOLD}│${NC}\n" \
-            "${current_ssid:0:30}" "${channel:-"?"}" "$signal_bar" "${security:-"WPA2"}" "Connected"
-        
+        printf "${BOLD}│${NC} %-44s ${BOLD}│${NC} ${GREEN}%-12s${NC} ${BOLD}│${NC}\n" \
+            "${current_ssid:0:44}" "Connected"
         networks_shown=$((networks_shown + 1))
     fi
     
-    # Try to get preferred/known networks
-    local known_networks=$(networksetup -listpreferredwirelessnetworks en0 2>/dev/null | grep -v "Preferred networks" | head -8)
+    # Get and display preferred/known networks
+    local known_networks=$(networksetup -listpreferredwirelessnetworks en0 2>/dev/null | grep -v "Preferred networks" | head -10)
     
-    if [ -n "$known_networks" ] && [ "$networks_shown" -lt 8 ]; then
+    if [ -n "$known_networks" ]; then
         echo "$known_networks" | while IFS= read -r network; do
             if [ -n "$network" ] && [ "$network" != "$current_ssid" ]; then
                 # Clean network name
                 local clean_network=$(echo "$network" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
                 if [ -n "$clean_network" ]; then
-                    printf "${BOLD}│${NC} %-30s ${BOLD}│${NC} %-7s ${BOLD}│${NC} %-7s ${BOLD}│${NC} %-8s ${BOLD}│${NC} %-8s ${BOLD}│${NC}\n" \
-                        "${clean_network:0:30}" "?" "░░░░" "Known" "Saved"
+                    printf "${BOLD}│${NC} %-44s ${BOLD}│${NC} ${YELLOW}%-12s${NC} ${BOLD}│${NC}\n" \
+                        "${clean_network:0:44}" "Saved"
                 fi
             fi
         done
@@ -234,13 +207,13 @@ wifi_scan() {
     
     # If no networks to show, display helpful message
     if [ "$networks_shown" -eq 0 ]; then
-        printf "${BOLD}│${NC} %-30s ${BOLD}│${NC} %-7s ${BOLD}│${NC} %-7s ${BOLD}│${NC} %-8s ${BOLD}│${NC} %-8s ${BOLD}│${NC}\n" \
-            "No active WiFi connection" "-" "-" "-" "-"
-        echo -e "${BOLD}├────────────────────────────────┼─────────┼─────────┼──────────┼──────────┤${NC}"
-        printf "${BOLD}│${NC} %-76s ${BOLD}│${NC}\n" "Connect to WiFi in System Settings to see details"
+        printf "${BOLD}│${NC} %-44s ${BOLD}│${NC} %-12s ${BOLD}│${NC}\n" \
+            "No active WiFi connection" "Disconnected"
+        echo -e "${BOLD}├──────────────────────────────────────────────┼──────────────┤${NC}"
+        printf "${BOLD}│${NC} %-59s ${BOLD}│${NC}\n" "Connect to WiFi in System Settings to see details"
     fi
     
-    echo -e "${BOLD}└────────────────────────────────┴─────────┴─────────┴──────────┴──────────┘${NC}"
+    echo -e "${BOLD}└──────────────────────────────────────────────┴──────────────┘${NC}"
     
     # Additional WiFi information
     echo
@@ -259,6 +232,7 @@ wifi_scan() {
     fi
     
     # WiFi capabilities
+    local wifi_info=$(system_profiler SPAirPortDataType 2>/dev/null)
     local supported_channels=$(echo "$wifi_info" | grep -E "(Supported Channels|supported.*channel)" | head -1)
     if [ -n "$supported_channels" ]; then
         echo -e "${GREEN}Supports: 2.4GHz & 5GHz bands${NC}"
@@ -273,6 +247,19 @@ wifi_scan() {
         if [ -n "$ip_address" ]; then
             echo -e "${GREEN}📍 IP Address: $ip_address${NC}"
         fi
+        
+        # Try to get some connection info if available
+        local gateway=$(route get default 2>/dev/null | grep gateway | awk '{print $2}')
+        if [ -n "$gateway" ]; then
+            echo -e "${GREEN}🌐 Gateway: $gateway${NC}"
+        fi
+        
+        # Get DNS servers
+        local dns_servers=$(scutil --dns | grep 'nameserver\[0\]' | awk '{print $3}' | head -2 | tr '\n' ' ')
+        if [ -n "$dns_servers" ]; then
+            echo -e "${GREEN}🔍 DNS Servers: $dns_servers${NC}"
+        fi
+        
     else
         echo -e "${YELLOW}📶 Not connected to any WiFi network${NC}"
         echo -e "${DIM}💡 Tip: Connect via System Settings > WiFi${NC}"
@@ -285,6 +272,124 @@ wifi_scan() {
     echo -e "${DIM}  sudo wdutil info                       # Detailed WiFi diagnostics${NC}"
     
     log_message "SUCCESS" "WiFi information displayed"
+}
+
+# Función alternativa con formato de lista (sin tabla)
+wifi_scan_list() {
+    log_message "INFO" "Starting WiFi scan"
+    echo -e "${CYAN}=== WiFi Network Scanner ===${NC}"
+    echo
+    
+    # Check if WiFi is enabled
+    if ! networksetup -getairportpower en0 2>/dev/null | grep -q "On"; then
+        log_message "ERROR" "WiFi is disabled"
+        echo -e "${RED}WiFi is disabled. Enable it first with: networksetup -setairportpower en0 on${NC}"
+        return 1
+    fi
+    
+    echo -e "${PURPLE}🔍 Analyzing WiFi information...${NC}"
+    
+    # Get current network connection info
+    local current_network=$(networksetup -getairportnetwork en0 2>/dev/null)
+    local current_ssid=""
+    
+    if echo "$current_network" | grep -q "Current Wi-Fi Network:"; then
+        current_ssid=$(echo "$current_network" | cut -d':' -f2 | sed 's/^ *//')
+    fi
+    
+    echo -e "${BOLD}📡 Available Networks:${NC}"
+    echo
+    
+    # Show current connected network
+    if [ -n "$current_ssid" ] && [[ "$current_ssid" != *"not associated"* ]]; then
+        echo -e "${GREEN}✅ ${BOLD}$current_ssid${NC} ${GREEN}(Connected)${NC}"
+        
+        # Show connection details
+        local ip_address=$(ifconfig en0 2>/dev/null | grep "inet " | awk '{print $2}')
+        if [ -n "$ip_address" ]; then
+            echo -e "${DIM}   IP Address: $ip_address${NC}"
+        fi
+        echo
+    fi
+    
+    # Get and display preferred/known networks
+    local known_networks=$(networksetup -listpreferredwirelessnetworks en0 2>/dev/null | grep -v "Preferred networks" | head -10)
+    
+    if [ -n "$known_networks" ]; then
+        echo -e "${BOLD}💾 Saved Networks:${NC}"
+        echo "$known_networks" | while IFS= read -r network; do
+            if [ -n "$network" ] && [ "$network" != "$current_ssid" ]; then
+                # Clean network name
+                local clean_network=$(echo "$network" | sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//')
+                if [ -n "$clean_network" ]; then
+                    echo -e "${YELLOW}📋 ${clean_network}${NC}"
+                fi
+            fi
+        done
+    fi
+    
+    # If no networks, show message
+    if [ -z "$current_ssid" ] || [[ "$current_ssid" == *"not associated"* ]]; then
+        echo -e "${RED}❌ No active WiFi connection${NC}"
+        echo -e "${DIM}💡 Connect via System Settings > WiFi${NC}"
+    fi
+    
+    echo
+    echo -e "${BLUE}📊 WiFi Interface Information:${NC}"
+    
+    # Interface status
+    local interface_status=$(ifconfig en0 2>/dev/null | grep "status:")
+    if [ -n "$interface_status" ]; then
+        echo -e "${GREEN}Interface: $(echo "$interface_status" | awk '{print $2}')${NC}"
+    fi
+    
+    # MAC address
+    local mac_address=$(ifconfig en0 2>/dev/null | grep "ether" | awk '{print $2}')
+    if [ -n "$mac_address" ]; then
+        echo -e "${GREEN}MAC Address: $mac_address${NC}"
+    fi
+    
+    # WiFi capabilities
+    local wifi_info=$(system_profiler SPAirPortDataType 2>/dev/null)
+    local supported_channels=$(echo "$wifi_info" | grep -E "(Supported Channels|supported.*channel)" | head -1)
+    if [ -n "$supported_channels" ]; then
+        echo -e "${GREEN}Supports: 2.4GHz & 5GHz bands${NC}"
+    fi
+    
+    log_message "SUCCESS" "WiFi information displayed"
+}
+
+# Función auxiliar para obtener información de red actual con airport
+get_current_wifi_details() {
+    local airport_cmd="/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+    
+    # Check if airport command is available
+    if [ -f "$airport_cmd" ]; then
+        # Get current WiFi network details
+        local wifi_details=$("$airport_cmd" -I 2>/dev/null)
+        
+        if [ -n "$wifi_details" ]; then
+            local ssid=$(echo "$wifi_details" | grep ' SSID:' | cut -d':' -f2 | sed 's/^ *//')
+            local channel=$(echo "$wifi_details" | grep ' channel:' | cut -d':' -f2 | sed 's/^ *//')
+            local rssi=$(echo "$wifi_details" | grep ' agrCtlRSSI:' | cut -d':' -f2 | sed 's/^ *//')
+            local security=$(echo "$wifi_details" | grep ' link auth:' | cut -d':' -f2 | sed 's/^ *//')
+            
+            echo "SSID:$ssid"
+            echo "Channel:$channel"
+            echo "RSSI:$rssi"
+            echo "Security:$security"
+        fi
+    fi
+}
+
+# Función auxiliar para scanear redes disponibles
+scan_available_networks() {
+    local airport_cmd="/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport"
+    
+    if [ -f "$airport_cmd" ]; then
+        # Scan available networks
+        "$airport_cmd" -s 2>/dev/null | tail -n +2 | head -10
+    fi
 }
 
 # Internet speed test
@@ -575,6 +680,273 @@ ip_info() {
     fi
 }
 
+# Función traceroute corregida para macOS
+traceroute_host() {
+    local host="$1"
+    local max_hops="${2:-30}"
+    
+    if [ -z "$host" ]; then
+        echo -e "${RED}❌ Host required for traceroute${NC}"
+        return 1
+    fi
+    
+    log_message "INFO" "Tracing route to $host"
+    echo -e "${CYAN}=== Traceroute Analysis ===${NC}"
+    echo -e "${BLUE}Target: ${BOLD}$host${NC}"
+    echo -e "${BLUE}Max hops: ${BOLD}$max_hops${NC}"
+    echo
+    
+    # Resolve hostname to IP if needed
+    local ip=$(dig +short "$host" 2>/dev/null | head -1)
+    if [ -n "$ip" ]; then
+        echo -e "${GREEN}Resolved to: $ip${NC}"
+    fi
+    echo
+    
+    # Check if traceroute is available
+    if ! command -v traceroute >/dev/null 2>&1; then
+        echo -e "${RED}❌ traceroute command not found${NC}"
+        echo -e "${YELLOW}Install with: brew install traceroute${NC}"
+        return 1
+    fi
+    
+    # Run traceroute and capture output
+    echo -e "${BLUE}🔍 Tracing route...${NC}"
+    echo
+    
+    # Execute traceroute with background process and timeout handling
+    local traceroute_output
+    local temp_file="/tmp/netty_traceroute_$$"
+    
+    # Start traceroute in background and capture PID
+    traceroute -m "$max_hops" "$host" > "$temp_file" 2>&1 &
+    local traceroute_pid=$!
+    
+    # Wait for completion with timeout
+    local timeout_counter=0
+    local max_timeout=60
+    
+    while [ $timeout_counter -lt $max_timeout ]; do
+        if ! kill -0 "$traceroute_pid" 2>/dev/null; then
+            # Process finished
+            break
+        fi
+        sleep 1
+        timeout_counter=$((timeout_counter + 1))
+    done
+    
+    # Check if process is still running (timeout)
+    if kill -0 "$traceroute_pid" 2>/dev/null; then
+        # Kill the process
+        kill "$traceroute_pid" 2>/dev/null
+        rm -f "$temp_file"
+        echo -e "${RED}❌ Traceroute timed out after 60 seconds${NC}"
+        log_message "ERROR" "Traceroute to $host timed out"
+        return 1
+    fi
+    
+    # Read results
+    if [ -f "$temp_file" ]; then
+        traceroute_output=$(cat "$temp_file")
+        rm -f "$temp_file"
+        
+        # Process and display results with improved formatting
+        echo "$traceroute_output" | while IFS= read -r line; do
+            if [[ "$line" =~ ^[[:space:]]*[0-9]+ ]]; then
+                # Extract hop number and format line
+                local hop_num=$(echo "$line" | awk '{print $1}')
+                local rest=$(echo "$line" | cut -d' ' -f2-)
+                
+                # Color code based on response time
+                if echo "$line" | grep -q "\*"; then
+                    echo -e "${RED}${hop_num}${NC} ${DIM}${rest}${NC}"
+                elif echo "$line" | grep -q "ms"; then
+                    # Extract timing info
+                    local timing=$(echo "$line" | grep -o '[0-9]*\.[0-9]*.*ms' | head -1)
+                    if [ -n "$timing" ]; then
+                        local ms_value=$(echo "$timing" | grep -o '[0-9]*\.[0-9]*' | head -1)
+                        if [ -n "$ms_value" ]; then
+                            local ms_int=$(echo "$ms_value" | cut -d'.' -f1)
+                            if [ "$ms_int" -lt 50 ]; then
+                                echo -e "${GREEN}${hop_num}${NC} ${rest}"
+                            elif [ "$ms_int" -lt 150 ]; then
+                                echo -e "${YELLOW}${hop_num}${NC} ${rest}"
+                            else
+                                echo -e "${RED}${hop_num}${NC} ${rest}"
+                            fi
+                        else
+                            echo -e "${BLUE}${hop_num}${NC} ${rest}"
+                        fi
+                    else
+                        echo -e "${BLUE}${hop_num}${NC} ${rest}"
+                    fi
+                else
+                    echo -e "${BLUE}${hop_num}${NC} ${rest}"
+                fi
+            else
+                echo -e "${DIM}${line}${NC}"
+            fi
+        done
+        
+        echo
+        echo -e "${GREEN}✅ Traceroute completed${NC}"
+        
+        # Extract and display summary statistics
+        local hop_count=$(echo "$traceroute_output" | grep -c "^[[:space:]]*[0-9]")
+        local timeout_count=$(echo "$traceroute_output" | grep -c "\*")
+        
+        echo -e "${CYAN}=== Route Summary ===${NC}"
+        echo -e "${BLUE}Total hops: ${GREEN}$hop_count${NC}"
+        echo -e "${BLUE}Timeouts: ${YELLOW}$timeout_count${NC}"
+        
+        log_message "SUCCESS" "Traceroute to $host completed - $hop_count hops, $timeout_count timeouts"
+        
+    else
+        echo -e "${RED}❌ Traceroute failed - no output generated${NC}"
+        log_message "ERROR" "Traceroute to $host failed"
+        return 1
+    fi
+}
+
+# Función alternativa usando mtr si está disponible
+mtr_trace() {
+    local host="$1"
+    local count="${2:-10}"
+    
+    if [ -z "$host" ]; then
+        echo -e "${RED}❌ Host required for MTR trace${NC}"
+        return 1
+    fi
+    
+    # Check if mtr is available
+    if ! command -v mtr >/dev/null 2>&1; then
+        echo -e "${YELLOW}MTR not available. Install with: brew install mtr${NC}"
+        traceroute_host "$host"
+        return
+    fi
+    
+    log_message "INFO" "MTR trace to $host"
+    echo -e "${CYAN}=== MTR Network Trace ===${NC}"
+    echo -e "${BLUE}Target: ${BOLD}$host${NC}"
+    echo -e "${BLUE}Count: ${BOLD}$count packets${NC}"
+    echo
+    
+    # Run mtr with report mode
+    echo -e "${BLUE}🔍 Running MTR trace...${NC}"
+    echo
+    
+    local mtr_output
+    local temp_file="/tmp/netty_mtr_$$"
+    
+    # Start mtr in background
+    mtr --report --report-cycles="$count" "$host" > "$temp_file" 2>&1 &
+    local mtr_pid=$!
+    
+    # Wait for completion with timeout
+    local timeout_counter=0
+    local max_timeout=120  # MTR can take longer
+    
+    while [ $timeout_counter -lt $max_timeout ]; do
+        if ! kill -0 "$mtr_pid" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+        timeout_counter=$((timeout_counter + 1))
+    done
+    
+    # Check if process is still running (timeout)
+    if kill -0 "$mtr_pid" 2>/dev/null; then
+        kill "$mtr_pid" 2>/dev/null
+        rm -f "$temp_file"
+        echo -e "${RED}❌ MTR trace timed out after 120 seconds${NC}"
+        log_message "ERROR" "MTR trace to $host timed out"
+        return 1
+    fi
+    
+    # Read and display results
+    if [ -f "$temp_file" ]; then
+        mtr_output=$(cat "$temp_file")
+        rm -f "$temp_file"
+        
+        echo "$mtr_output"
+        echo
+        echo -e "${GREEN}✅ MTR trace completed${NC}"
+        log_message "SUCCESS" "MTR trace to $host completed"
+    else
+        echo -e "${RED}❌ MTR trace failed${NC}"
+        log_message "ERROR" "MTR trace to $host failed"
+        return 1
+    fi
+}
+
+# Función combinada que usa la mejor herramienta disponible
+enhanced_trace() {
+    local host="$1"
+    local count="${2:-10}"
+    
+    if [ -z "$host" ]; then
+        echo -e "${RED}❌ Host required for trace${NC}"
+        return 1
+    fi
+    
+    # Check what tools are available and use the best one
+    if command -v mtr >/dev/null 2>&1; then
+        mtr_trace "$host" "$count"
+    elif command -v traceroute >/dev/null 2>&1; then
+        traceroute_host "$host" 30
+    else
+        echo -e "${RED}❌ No traceroute tools available${NC}"
+        echo -e "${YELLOW}Install with:${NC}"
+        echo -e "${DIM}  brew install traceroute${NC}"
+        echo -e "${DIM}  brew install mtr${NC}"
+        return 1
+    fi
+}
+
+# Función simple de traceroute sin timeout para casos básicos
+simple_trace() {
+    local host="$1"
+    local max_hops="${2:-30}"
+    
+    if [ -z "$host" ]; then
+        echo -e "${RED}❌ Host required for traceroute${NC}"
+        return 1
+    fi
+    
+    log_message "INFO" "Simple trace to $host"
+    echo -e "${CYAN}=== Simple Traceroute ===${NC}"
+    echo -e "${BLUE}Target: ${BOLD}$host${NC}"
+    echo
+    
+    # Resolve hostname to IP if needed
+    local ip=$(dig +short "$host" 2>/dev/null | head -1)
+    if [ -n "$ip" ]; then
+        echo -e "${GREEN}Resolved to: $ip${NC}"
+    fi
+    echo
+    
+    # Check if traceroute is available
+    if ! command -v traceroute >/dev/null 2>&1; then
+        echo -e "${RED}❌ traceroute command not found${NC}"
+        echo -e "${YELLOW}Install with: brew install traceroute${NC}"
+        return 1
+    fi
+    
+    echo -e "${BLUE}🔍 Tracing route...${NC}"
+    echo
+    
+    # Run traceroute directly (without timeout)
+    if traceroute -m "$max_hops" "$host" 2>&1; then
+        echo
+        echo -e "${GREEN}✅ Traceroute completed${NC}"
+        log_message "SUCCESS" "Simple trace to $host completed"
+    else
+        echo -e "${RED}❌ Traceroute failed${NC}"
+        log_message "ERROR" "Simple trace to $host failed"
+        return 1
+    fi
+}
+
 # Export results
 export_results() {
     local format="${1:-json}"
@@ -643,6 +1015,9 @@ main() {
             ;;
         "ping")
             enhanced_ping "$@"
+            ;;
+        "trace"|"traceroute")
+            enhanced_trace "$@"
             ;;
         "export")
             export_results "$@"
